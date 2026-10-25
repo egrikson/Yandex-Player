@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>One Dark Player</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="splash" class="splash">// подключаюсь к Яндекс Музыке…</div>
+
+  <div id="app" class="app" hidden>
+    <aside class="tree">
+      <div class="tree-scroll">
+        <div class="tree-head" data-icon="chevron"><span id="userName">музыка</span></div>
+        <nav id="library" class="tree-list"></nav>
+        <div class="tree-head" data-icon="chevron">плейлисты</div>
+        <nav id="playlists" class="tree-list"></nav>
+      </div>
+      <button id="logoutBtn" class="tree-foot" title="Выйти из аккаунта">
+        <span data-icon="logout"></span>выйти
+      </button>
+    </aside>
+
+    <main class="editor">
+      <header class="tabs">
+        <div class="tab">
+          <span id="tabIcon" class="tab-icon"></span>
+          <span id="tabTitle" class="tab-title"></span>
+          <button id="refreshBtn" class="tab-refresh" title="Обновить" data-icon="refresh"></button>
+          <button id="tabWave" class="tab-refresh tab-wave" title="Моя волна по этому плейлисту" data-icon="wave" hidden>волна</button>
+        </div>
+        <label class="filter">
+          <span data-icon="search"></span>
+          <input id="filter" type="text" placeholder="фильтр" spellcheck="false" autocomplete="off">
+          <kbd>Ctrl F</kbd>
+        </label>
+      </header>
+
+      <section id="waveBar" class="wave-bar" hidden>
+        <div class="wave-top">
+          <span class="wave-icon" data-icon="wave"></span>
+          <span id="waveTitle" class="wave-title">Моя волна</span>
+          <span id="waveSummary" class="wave-summary"></span>
+          <span class="spacer"></span>
+          <button id="waveReset" class="link-btn" hidden>вернуться к Моей волне</button>
+          <button id="waveTune" class="link-btn" data-icon="sliders">настроить</button>
+          <button id="wavePlay" class="btn small primary" data-icon="play">Слушать</button>
+        </div>
+        <div id="waveSettings" class="wave-settings" hidden></div>
+      </section>
+
+      <div id="list" class="list" tabindex="-1"></div>
+    </main>
+
+    <section id="stage" class="stage" hidden>
+      <div id="stageBg" class="stage-bg"></div>
+      <div class="stage-art">
+        <div id="stageCover" class="stage-cover" data-icon="note"></div>
+        <div class="stage-meta">
+          <div id="stageTitle" class="stage-title"></div>
+          <div id="stageArtist" class="stage-artist"></div>
+          <button id="stageSource" class="stage-source" title="Показать в списке"></button>
+          <div class="stage-actions">
+            <button id="stageWaveTrack" class="chip" data-icon="wave">волна по треку</button>
+            <button id="stageWaveArtist" class="chip" data-icon="wave">волна по исполнителю</button>
+          </div>
+        </div>
+      </div>
+      <aside class="side">
+        <header class="side-head">
+          <div class="side-tabs" role="tablist">
+            <button class="side-tab" data-tab="queue" role="tab">Очередь</button>
+            <button class="side-tab" data-tab="lyrics" role="tab">Текст</button>
+          </div>
+          <button id="swapSideBtn" class="icon-btn" title="Перенести панель на другую сторону" data-icon="swap"></button>
+          <button id="stageCloseBtn" class="icon-btn" title="Свернуть (Esc)" data-icon="chevron"></button>
+        </header>
+        <div id="sideQueue" class="side-body"></div>
+        <div id="sideLyrics" class="side-body lyrics" hidden></div>
+      </aside>
+    </section>
+
+    <footer class="player">
+      <div class="now">
+        <button id="nowOpen" class="now-open" title="Развернуть обложку">
+          <span id="nowCover" class="cover" data-icon="note"></span>
+          <span class="now-text">
+            <span id="nowTitle" class="now-title">ничего не играет</span>
+            <span id="nowArtist" class="now-artist">выберите трек</span>
+          </span>
+        </button>
+        <button id="nowLike" class="icon-btn like" title="Мне нравится (L)" data-icon="heart" hidden></button>
+      </div>
+
+      <div class="transport">
+        <div class="buttons">
+          <button id="shuffleBtn" class="icon-btn toggle" title="Перемешать (S)" data-icon="shuffle"></button>
+          <button id="prevBtn" class="icon-btn" title="Предыдущий (Ctrl ←)" data-icon="prev"></button>
+          <button id="playBtn" class="play-btn" title="Играть / пауза (Пробел)" data-icon="play"></button>
+          <button id="nextBtn" class="icon-btn" title="Следующий (Ctrl →)" data-icon="next"></button>
+          <button id="repeatBtn" class="icon-btn toggle" title="Повтор (R)" data-icon="repeat"></button>
+        </div>
+        <div class="progress-row">
+          <span id="timeCur" class="time">0:00</span>
+          <div id="progress" class="progress"><div id="progressFill" class="progress-fill"></div></div>
+          <span id="timeDur" class="time">0:00</span>
+        </div>
+      </div>
+
+      <div class="tools">
+        <button id="lyricsBtn" class="icon-btn" title="Текст песни (T)" data-icon="mic"></button>
+        <button id="queueBtn" class="icon-btn" title="Очередь (Q)" data-icon="queue"></button>
+        <button id="eqBtn" class="icon-btn toggle" title="Эквалайзер (E)" data-icon="sliders"></button>
+        <span class="tools-sep"></span>
+        <button id="muteBtn" class="icon-btn" title="Звук (↑ ↓)" data-icon="volume"></button>
+        <input id="volume" type="range" min="0" max="100" value="80" aria-label="Громкость">
+      </div>
+    </footer>
+
+    <div class="status">
+      <span class="status-item"><span id="statusDot" class="dot"></span>Яндекс Музыка</span>
+      <span id="statusSource" class="status-item"></span>
+      <span id="statusWarn" class="status-item warn" hidden></span>
+      <span class="spacer"></span>
+      <span id="statusEq" class="status-item"></span>
+      <span id="statusCodec" class="status-item"></span>
+      <button id="themeBtn" class="theme-btn" title="Тема оформления" data-icon="palette"><span id="themeName"></span></button>
+      <span class="status-item keys" title="Пробел — играть/пауза&#10;← → — перемотка 5 с&#10;Ctrl ← → — предыдущий/следующий&#10;↑ ↓ — громкость&#10;L — лайк, S — перемешать, R — повтор&#10;T — текст, Q — очередь, E — эквалайзер&#10;Ctrl F — фильтр, Esc — закрыть / сбросить&#10;Правый клик по треку — волна по треку или исполнителю" data-icon="keyboard"></span>
+    </div>
+  </div>
+
+  <div id="eqPanel" class="eq-panel" hidden>
+    <header class="eq-head">
+      <span class="eq-title">Эквалайзер</span>
+      <label class="switch" title="Включить / выключить"><input id="eqOn" type="checkbox"><span></span></label>
+      <span class="spacer"></span>
+      <button id="eqReset" class="link-btn">сбросить</button>
+      <button id="eqClose" class="icon-btn" title="Закрыть (Esc)" data-icon="close"></button>
+    </header>
+    <canvas id="eqCanvas" class="eq-canvas"></canvas>
+    <div id="eqBands" class="eq-bands"></div>
+    <div id="eqPresets" class="eq-presets"></div>
+  </div>
+
+  <div id="menu" class="menu" hidden></div>
+
+  <div id="login" class="login" hidden>
+    <div class="login-card">
+      <div class="login-logo" data-icon="logo"></div>
+      <h1>One Dark Player</h1>
+      <p class="login-sub">Ваша Яндекс Музыка в теме One Dark</p>
+      <button id="loginBtn" class="btn primary">Войти через Яндекс</button>
+      <details class="token">
+        <summary>У меня есть токен</summary>
+        <form id="tokenForm" class="token-form">
+          <input id="tokenInput" type="password" placeholder="токен или адрес с access_token" spellcheck="false" autocomplete="off">
+          <button class="btn" type="submit">OK</button>
+        </form>
+      </details>
+      <p id="loginError" class="login-error" hidden></p>
+      <p class="login-note">Токен хранится только на этом компьютере.</p>
+    </div>
+  </div>
+
+  <div id="toasts" class="toasts"></div>
+
+  <script src="themes.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
