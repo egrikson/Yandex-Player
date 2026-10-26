@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 0, 0),
-    prodvers=(1, 0, 0, 0),
+    filevers=(1, 1, 0, 0),
+    prodvers=(1, 1, 0, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -12,12 +12,12 @@ VSVersionInfo(
   kids=[
     StringFileInfo([
       StringTable('041904B0', [
-        StringStruct('FileDescription', 'One Dark Player'),
-        StringStruct('FileVersion', '1.0.0'),
-        StringStruct('InternalName', 'OneDarkPlayer'),
-        StringStruct('OriginalFilename', 'One Dark Player.exe'),
-        StringStruct('ProductName', 'One Dark Player'),
-        StringStruct('ProductVersion', '1.0.0')
+        StringStruct('FileDescription', 'Яндекс плеер кастом'),
+        StringStruct('FileVersion', '1.1.0'),
+        StringStruct('InternalName', 'YandexPlayerCustom'),
+        StringStruct('OriginalFilename', 'Яндекс плеер кастом.exe'),
+        StringStruct('ProductName', 'Яндекс плеер кастом'),
+        StringStruct('ProductVersion', '1.1.0')
       ])
     ]),
     VarFileInfo([VarStruct('Translation', [1049, 1200])])

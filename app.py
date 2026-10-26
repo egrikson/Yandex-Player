@@ -1,4 +1,4 @@
-"""One Dark Player — минималистичный плеер для Яндекс Музыки в теме Atom One Dark."""
+"""Яндекс плеер кастом — минималистичный плеер для Яндекс Музыки в стиле редактора кода."""
 
 import ctypes
 import json
@@ -17,15 +17,17 @@ import requests
 import webview
 from yandex_music import Client
 from yandex_music.exceptions import UnauthorizedError, YandexMusicError
+from yandex_music.utils.request import Request
 
 from taskbar import TaskbarButtons
 
-APP_TITLE = 'One Dark Player'
+APP_TITLE = 'Яндекс плеер кастом'
 LOGIN_TITLE = 'Вход в Яндекс'
 APP_DIR = Path(__file__).resolve().parent
 # В собранном .exe интерфейс и иконка распакованы во временную папку PyInstaller.
 RES_DIR = Path(getattr(sys, '_MEIPASS', APP_DIR))
 FROZEN = getattr(sys, 'frozen', False)
+# Папка данных осталась от прежнего названия: в ней вход в Яндекс и настройки.
 DATA_DIR = Path(os.environ.get('APPDATA') or Path.home()) / 'OneDarkPlayer'
 CONFIG_FILE = DATA_DIR / 'config.json'
 
@@ -38,6 +40,7 @@ OAUTH_URL = (
 TOKEN_RE = re.compile(r'access_token=([^&#\s]+)')
 LOGIN_TIMEOUT = 600
 UI_PORT = 47813  # постоянный адрес интерфейса, если порт свободен
+API_TIMEOUT = 20  # секунд на запрос к Яндекс Музыке
 
 MY_WAVE = 'user:onyourwave'
 SETTING_GROUPS = (('diversity', 'Характер'), ('mood_energy', 'Настроение'), ('language', 'Язык'))
@@ -51,7 +54,7 @@ FALLBACK_SETTINGS = {
 
 LRC_TIME = re.compile(r'\[(\d+):(\d+(?:[.:]\d+)?)\]')
 LRCLIB_URL = 'https://lrclib.net/api'
-LRCLIB_HEADERS = {'User-Agent': 'OneDarkPlayer/1.1 (desktop player)'}
+LRCLIB_HEADERS = {'User-Agent': 'YandexPlayerCustom/1.1 (desktop player)'}
 LRCLIB_TOLERANCE = 3  # секунд: длительность записи в LRCLIB может немного отличаться
 
 log = logging.getLogger('player')
@@ -299,7 +302,8 @@ class Api:
         if not token:
             return {'authorized': False}
         try:
-            self._client = Client(token, report_unknown_fields=False).init()
+            # 5 секунд по умолчанию мало: большой список лайков через VPN-прокси не успевает прийти
+            self._client = Client(token, request=Request(timeout=API_TIMEOUT), report_unknown_fields=False).init()
         except UnauthorizedError:
             return {'authorized': False, 'error': 'Сессия истекла, войдите ещё раз'}
         except YandexMusicError as e:
@@ -651,7 +655,7 @@ def main():
     if not FROZEN:
         # Запуск из исходников: своя кнопка в панели задач, а не общая с Python.
         try:
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('OneDarkPlayer')
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('YandexPlayerCustom')
         except Exception:
             pass
     api = Api()

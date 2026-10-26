@@ -1,6 +1,7 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0.."
+set "APP=Яндекс плеер кастом"
 
 if not exist ".venv\Scripts\python.exe" (
     python -m venv .venv || goto :fail
@@ -9,7 +10,7 @@ if not exist ".venv\Scripts\python.exe" (
 ".venv\Scripts\python.exe" tools\make_icon.py || goto :fail
 
 ".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean --onefile --windowed ^
-    --name "One Dark Player" ^
+    --name "%APP%" ^
     --icon "%CD%\icon.ico" ^
     --version-file "%CD%\tools\version_info.txt" ^
     --add-data "%CD%\ui;ui" ^
@@ -19,14 +20,16 @@ if not exist ".venv\Scripts\python.exe" (
     app.py || goto :fail
 
 rem Запущенный exe нельзя удалить, но можно переименовать — так сборка не мешает слушать музыку.
-del /q "One Dark Player.old*.exe" 2>nul
-if exist "One Dark Player.exe" del /q "One Dark Player.exe" 2>nul
-if exist "One Dark Player.exe" ren "One Dark Player.exe" "One Dark Player.old-%RANDOM%.exe"
-move /y "build\dist\One Dark Player.exe" . >nul || goto :fail
+del /q "%APP%.old*.exe" 2>nul
+rem сборки под прежним названием
+del /q "One Dark Player*.exe" 2>nul
+if exist "%APP%.exe" del /q "%APP%.exe" 2>nul
+if exist "%APP%.exe" ren "%APP%.exe" "%APP%.old-%RANDOM%.exe"
+move /y "build\dist\%APP%.exe" . >nul || goto :fail
 
 rmdir /s /q build
 echo.
-echo Готово: One Dark Player.exe
+echo Готово: %APP%.exe
 exit /b 0
 
 :fail
