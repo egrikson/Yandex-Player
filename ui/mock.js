@@ -31,6 +31,7 @@
   const lists = { liked: make(64), 1: make(18), 2: make(7), 3: [] };
   lists.liked.forEach(t => { t.liked = true; });
   const likedIds = new Set(lists.liked.map(t => t.id));
+  const artistTracks = {};
   const playlists = [
     { id: '1', title: 'В дорогу', count: 18, icon: 'list' },
     { id: '2', title: 'Фокус и работа без слов', count: 7, icon: 'list' },
@@ -137,6 +138,26 @@
       set_title: async t => { document.title = t; },
       set_titlebar: async () => true,
       set_playing: async () => true,
+      get_artist: async id => {
+        await sleep(300);
+        const n = Number(id) - 500;
+        return {
+          id: String(id),
+          name: artists[n] || 'Исполнитель',
+          cover: n % 3 ? cover(n) : null,
+          genres: ['electronics', 'indie'],
+          tracks: 64,
+          listeners: 12345 * (n + 1),
+          similar: artists.map((name, k) => ({ id: String(500 + k), name, cover: cover(k) }))
+            .filter(s => s.id !== String(id)).slice(0, 6),
+        };
+      },
+      get_artist_tracks: async (id, page) => {
+        await sleep(300);
+        const name = artists[Number(id) - 500] || 'Исполнитель';
+        artistTracks[id] = artistTracks[id] || make(64).map(t => ({ ...t, artists: name, artistList: [{ id: Number(id), name }] }));
+        return { tracks: artistTracks[id].slice(page * 50, page * 50 + 50), total: artistTracks[id].length };
+      },
       get_settings: async () => JSON.parse(localStorage.getItem('odp.mockSettings') || '{}'),
       save_settings: async s => { localStorage.setItem('odp.mockSettings', JSON.stringify(s)); return true; },
     },

@@ -26,6 +26,7 @@ const ICONS = {
   logout: '<path class="ico-stroke" d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10"/>',
   chevron: '<path class="ico-stroke" d="M7 10l5 5 5-5"/>',
   back: '<path class="ico-stroke" d="M19 12H5M11 18l-6-6 6-6"/>',
+  user: '<circle class="ico-stroke" cx="12" cy="8" r="4"/><path class="ico-stroke" d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>',
   note: '<path class="ico-stroke" d="M9 18V5.5l10-2V16"/><circle class="ico-stroke" cx="6.5" cy="18" r="2.5"/><circle class="ico-stroke" cx="16.5" cy="16" r="2.5"/>',
   keyboard: '<rect class="ico-stroke" x="2.5" y="6" width="19" height="12" rx="2"/><path class="ico-stroke" d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M8 14h8"/>',
   palette: '<path class="ico-stroke" d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.5-.2-.8-.5-1.2-.3-.4-.5-.7-.5-1.2 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5C21 6.4 17 3 12 3z"/>'
@@ -157,6 +158,11 @@ const state = {
   lyricsLine: -1,
   lyricsHoldUntil: 0,
   lyricsCache: new Map(),
+
+  // вкладка исполнителя
+  baseView: null,        // плейлист в основной вкладке
+  artist: null,          // { id, name, info, total, page, loading, error } — открытая вкладка исполнителя
+  artistNames: new Map(),
 };
 
 const audio = new Audio();
@@ -234,7 +240,8 @@ async function logout() {
   closeStage();
   state.cache.clear();
   state.lyricsCache.clear();
-  Object.assign(state, { queue: [], order: [], current: null, source: null, wave: null, waveOptions: null });
+  Object.assign(state, { queue: [], order: [], current: null, source: null, wave: null, waveOptions: null, artist: null });
+  $('artistTab').hidden = true;
   await call('logout').catch(() => {});
   showLogin();
 }
@@ -243,7 +250,15 @@ async function logout() {
 
 const playlistById = id => state.playlists.find(p => p.id === id);
 const isSystem = p => p.id === 'liked' || p.id === 'wave';
-const sourceTitle = id => (id === 'wave' ? state.wave?.title || 'Моя волна' : playlistById(id)?.title || '');
+const isArtist = id => String(id).startsWith('artist:');
+const sourceTitle = id => {
+  if (id === 'wave') return state.wave?.title || 'Моя волна';
+  if (isArtist(id)) return state.artistNames.get(id.slice(7)) || 'исполнитель';
+  return playlistById(id)?.title || '';
+};
+const artistLinks = t => (t.artistList?.length
+  ? t.artistList.map(a => `<span class="a-link" data-artist="${esc(a.id)}">${esc(a.name)}</span>`).join(', ')
+  : esc(t.artists));
 
 function renderTree() {
   const item = p => `
@@ -262,6 +277,7 @@ async function openView(id, force = false) {
   if (!p) return;
   const seq = ++state.viewSeq;
   state.view = id;
+  state.baseView = id;
   store.set('view', id);
   if (state.filter) {
     state.filter = '';
@@ -272,6 +288,7 @@ async function openView(id, force = false) {
   $('refreshBtn').classList.remove('spin');
   $('waveBar').hidden = id !== 'wave';
   $('tabWave').hidden = isSystem(p);
+  setActiveTab('base');
   renderTree();
 
   if (id === 'wave') {
@@ -328,12 +345,13 @@ function rowHtml(t, i) {
     + `<span class="gutter">${cur ? EQ_ANIM : i + 1}</span>`
     + `<button class="icon-btn like${t.liked ? ' on' : ''}" data-act="like" title="Мне нравится">${svg('heart')}</button>`
     + `<span class="r-title">${esc(t.title)}</span>`
-    + `<span class="r-artist">${esc(t.artists)}</span>`
+    + `<span class="r-artist">${artistLinks(t)}</span>`
     + `<span class="r-dur">${fmt(t.duration)}</span>`
     + '</div>';
 }
 
 function renderList() {
+  if (isArtist(state.view)) return renderArtist();
   const all = state.cache.get(state.view) || [];
   const q = state.filter.trim().toLowerCase();
   state.visible = q ? all.filter(t => `${t.title} ${t.artists}`.toLowerCase().includes(q)) : all;
@@ -346,7 +364,10 @@ function renderList() {
 function updateStatusSource() {
   const all = state.cache.get(state.view) || [];
   const n = state.visible.length;
-  const count = state.filter.trim() ? `${n} из ${all.length}` : `${n} ${plural(n, 'трек', 'трека', 'треков')}`;
+  const total = isArtist(state.view) ? state.artist?.total ?? all.length : all.length;
+  const count = state.filter.trim() || total > all.length
+    ? `${n} из ${total}`
+    : `${n} ${plural(n, 'трек', 'трека', 'треков')}`;
   $('statusSource').textContent = `${sourceTitle(state.view)} · ${count}`;
 }
 
@@ -371,11 +392,156 @@ function markCurrent() {
 
 function revealCurrent() {
   if (!state.source || !state.current) return;
-  const go = state.view === state.source ? Promise.resolve() : openView(state.source);
+  const go = state.view === state.source ? Promise.resolve() : openSource(state.source);
   go.then(() => {
     const row = rowOf(state.visible.find(t => t.id === state.current.id));
     row?.scrollIntoView({ block: 'center' });
   });
+}
+
+function openSource(id) {
+  return isArtist(id) ? openArtist({ id: id.slice(7), name: state.artistNames.get(id.slice(7)) }) : openView(id);
+}
+
+/* ---------- вкладка исполнителя ---------- */
+
+function setActiveTab(which) {
+  $('baseTab').classList.toggle('active', which === 'base');
+  $('artistTab').classList.toggle('active', which === 'artist');
+  $('artistTab').hidden = !state.artist;
+  if (state.artist) $('artistTabTitle').textContent = state.artist.name;
+}
+
+async function openArtist(a, force = false) {
+  if (!a?.id) return;
+  const id = String(a.id);
+  const key = `artist:${id}`;
+  if (state.stageOpen) closeStage();
+  hideMenu();
+  if (a.name) state.artistNames.set(id, a.name);
+  if (force || state.artist?.id !== id) {
+    state.artist = { id, name: a.name || state.artistNames.get(id) || 'исполнитель', info: null, total: null, page: 0, loading: true, error: null };
+    state.cache.delete(key);
+  }
+  const ar = state.artist;
+  ++state.viewSeq;
+  state.view = key;
+  if (state.filter) {
+    state.filter = '';
+    $('filter').value = '';
+  }
+  $('waveBar').hidden = true;
+  setActiveTab('artist');
+  renderTree();
+  if (state.cache.has(key) || ar.error) return renderList();
+
+  renderList();
+  $('list').scrollTop = 0;
+  try {
+    const [info, page] = await Promise.all([call('get_artist', id), call('get_artist_tracks', id, 0)]);
+    Object.assign(ar, { info, name: info.name, total: page.total, page: 0 });
+    state.artistNames.set(id, info.name);
+    state.cache.set(key, page.tracks);
+  } catch (e) {
+    ar.error = e.message;
+  }
+  ar.loading = false;
+  if (state.artist !== ar) return;
+  setActiveTab(isArtist(state.view) ? 'artist' : 'base');
+  if (state.view === key) renderList();
+}
+
+function closeArtistTab() {
+  if (!state.artist) return;
+  const wasActive = isArtist(state.view);
+  state.artist = null;
+  $('artistTab').hidden = true;
+  if (wasActive) openView(state.baseView || 'liked');
+}
+
+function artistHeaderHtml(ar) {
+  const info = ar.info;
+  const avatar = info?.cover
+    ? `<div class="artist-avatar has-art" style="background-image:url('${esc(info.cover)}')">${svg('user')}</div>`
+    : `<div class="artist-avatar">${svg('user')}</div>`;
+  const stats = [];
+  if (info?.listeners != null) {
+    stats.push(`<b>${info.listeners.toLocaleString('ru-RU')}</b> ${plural(info.listeners, 'слушатель', 'слушателя', 'слушателей')} за месяц`);
+  }
+  if (info?.tracks != null) stats.push(`<b>${info.tracks}</b> ${plural(info.tracks, 'трек', 'трека', 'треков')}`);
+  const similar = info?.similar?.length
+    ? `<div class="artist-similar"><span class="similar-label">// похожие</span>${info.similar.map(s =>
+      `<button class="chip" data-act="artist-open" data-artist="${esc(s.id)}" data-name="${esc(s.name)}">`
+      + `<span class="chip-avatar"${s.cover ? ` style="background-image:url('${esc(s.cover)}')"` : ''}></span>${esc(s.name)}</button>`).join('')}</div>`
+    : '';
+  return `<section class="artist-head">${avatar}<div class="artist-meta">`
+    + '<div class="artist-kind">// исполнитель</div>'
+    + `<h2 class="artist-name" title="${esc(ar.name)}">${esc(ar.name)}</h2>`
+    + (stats.length ? `<div class="artist-stats">${stats.join(' · ')}</div>` : '')
+    + (info?.genres?.length ? `<div class="artist-genres">// ${esc(info.genres.join(' · '))}</div>` : '')
+    + '<div class="artist-actions">'
+    + `<button class="btn small primary" data-act="artist-play"${ar.loading ? ' disabled' : ''}>${svg('play')}Слушать</button>`
+    + `<button class="chip" data-act="artist-wave">${svg('wave')}Моя волна по исполнителю</button>`
+    + `</div></div></section>${similar}`;
+}
+
+function renderArtist() {
+  const ar = state.artist;
+  const all = state.cache.get(state.view) || [];
+  const q = state.filter.trim().toLowerCase();
+  state.visible = q ? all.filter(t => `${t.title} ${t.artists}`.toLowerCase().includes(q)) : all;
+  let html = artistHeaderHtml(ar);
+  if (ar.error) {
+    html += `<div class="comment error">// не удалось загрузить: ${esc(ar.error)}</div>`;
+  } else if (ar.loading && !all.length) {
+    html += '<div class="comment">// загружаю треки…</div>';
+  } else if (!all.length) {
+    html += '<div class="comment">// у исполнителя нет треков</div>';
+  } else if (!state.visible.length) {
+    html += `<div class="comment">// ничего не найдено по «${esc(state.filter.trim())}»</div>`;
+  } else {
+    html += `<div class="list-label">// треки по популярности · ${ar.total ?? all.length}</div>`;
+    html += state.visible.map(rowHtml).join('');
+    const left = (ar.total || 0) - all.length;
+    if (left > 0 && !q) {
+      html += `<button class="more-row" data-act="artist-more">// ещё ${left} ${plural(left, 'трек', 'трека', 'треков')} — загрузить</button>`;
+    }
+  }
+  $('list').innerHTML = html;
+  updateStatusSource();
+}
+
+async function loadMoreArtist(button) {
+  const ar = state.artist;
+  if (!ar || ar.loading) return;
+  const key = `artist:${ar.id}`;
+  const list = state.cache.get(key) || [];
+  ar.loading = true;
+  if (button) {
+    button.disabled = true;
+    button.textContent = '// загружаю…';
+  }
+  try {
+    const page = await call('get_artist_tracks', ar.id, ar.page + 1);
+    ar.page += 1;
+    ar.total = page.total;
+    const have = new Set(list.map(t => t.id));
+    list.push(...page.tracks.filter(t => !have.has(t.id)));
+    if (!page.tracks.length) ar.total = list.length; // Яндекс отдал меньше, чем обещал
+  } catch (e) {
+    toast('error', `Не удалось загрузить треки: ${e.message}`);
+  }
+  ar.loading = false;
+  if (state.artist === ar && state.view === key) {
+    const top = $('list').scrollTop;
+    renderList();
+    $('list').scrollTop = top;
+  }
+}
+
+function playArtist() {
+  const i = state.visible.findIndex(t => t.available);
+  if (i >= 0) playFrom(state.visible, i, state.view);
 }
 
 /* ---------- воспроизведение ---------- */
@@ -757,7 +923,7 @@ function renderStage() {
   $('stageCover').classList.toggle('has-art', !!art);
   $('stageBg').style.backgroundImage = art ? `url("${bigCover(t.cover, '200x200')}")` : '';
   $('stageTitle').textContent = t ? t.title : 'ничего не играет';
-  $('stageArtist').textContent = t ? t.artists : 'выберите трек в списке';
+  $('stageArtist').innerHTML = t ? artistLinks(t) : 'выберите трек в списке';
   $('stageSource').textContent = t && state.source ? `// ${sourceTitle(state.source)}` : '';
   $('stageWaveTrack').hidden = !t;
   const artist = t?.artistList?.[0];
@@ -1156,6 +1322,9 @@ function trackMenu(e, t, target, play) {
   e.preventDefault();
   const items = [];
   if (play && t.available) items.push({ icon: 'play', label: 'Играть', run: play }, '-');
+  for (const a of (t.artistList || []).slice(0, 3)) {
+    items.push({ icon: 'user', label: `Открыть исполнителя: ${a.name}`, run: () => openArtist(a) });
+  }
   items.push({ icon: 'wave', label: 'Моя волна по треку', run: () => waveByTrack(t) });
   for (const a of (t.artistList || []).slice(0, 3)) {
     items.push({ icon: 'wave', label: `Моя волна по исполнителю: ${a.name}`, run: () => waveByArtist(a) });
@@ -1402,12 +1571,42 @@ function bindUi() {
     const item = e.target.closest('.tree-item');
     if (item) treeMenu(e, item);
   });
-  $('refreshBtn').addEventListener('click', () => state.view && openView(state.view, true));
-  $('tabWave').addEventListener('click', () => waveByPlaylist(playlistById(state.view)));
+  $('refreshBtn').addEventListener('click', e => {
+    e.stopPropagation();
+    if (state.baseView) openView(state.baseView, true);
+  });
+  $('tabWave').addEventListener('click', e => {
+    e.stopPropagation();
+    waveByPlaylist(playlistById(state.baseView));
+  });
+  $('baseTab').addEventListener('click', () => {
+    if (state.view !== state.baseView && state.baseView) openView(state.baseView);
+  });
+  $('artistTab').addEventListener('click', () => {
+    if (state.artist && !isArtist(state.view)) openArtist(state.artist);
+  });
+  $('artistTabClose').addEventListener('click', e => {
+    e.stopPropagation();
+    closeArtistTab();
+  });
+  $('stageArtist').addEventListener('click', e => {
+    const link = e.target.closest('.a-link');
+    if (link) openArtist({ id: link.dataset.artist, name: link.textContent });
+  });
   $('themeBtn').addEventListener('click', themeMenu);
 
   const list = $('list');
   list.addEventListener('click', e => {
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (act === 'artist-more') return loadMoreArtist(e.target.closest('.more-row'));
+    if (act === 'artist-play') return playArtist();
+    if (act === 'artist-wave') return waveByArtist({ id: state.artist.id, name: state.artist.name });
+    if (act === 'artist-open') {
+      const chip = e.target.closest('[data-act]');
+      return openArtist({ id: chip.dataset.artist, name: chip.dataset.name });
+    }
+    const link = e.target.closest('.a-link');
+    if (link) return openArtist({ id: link.dataset.artist, name: link.textContent });
     const row = e.target.closest('.row');
     if (!row) return;
     const i = +row.dataset.i;
@@ -1645,6 +1844,11 @@ function onKey(e) {
       return renderList();
     }
     if (state.stageOpen) return closeStage();
+    return;
+  }
+  if (e.ctrlKey && e.code === 'KeyW') {
+    e.preventDefault();
+    closeArtistTab();
     return;
   }
   if (e.ctrlKey && e.code === 'KeyF') {

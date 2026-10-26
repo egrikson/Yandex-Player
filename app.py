@@ -41,6 +41,7 @@ TOKEN_RE = re.compile(r'access_token=([^&#\s]+)')
 LOGIN_TIMEOUT = 600
 UI_PORT = 47813  # постоянный адрес интерфейса, если порт свободен
 API_TIMEOUT = 20  # секунд на запрос к Яндекс Музыке
+ARTIST_PAGE = 50  # треков исполнителя за одну подгрузку
 
 MY_WAVE = 'user:onyourwave'
 SETTING_GROUPS = (('diversity', 'Характер'), ('mood_energy', 'Настроение'), ('language', 'Язык'))
@@ -133,6 +134,11 @@ def bare_id(track_id):
 
 def cover_url(uri, size='200x200'):
     return f'https://{uri.replace("%%", size)}' if uri else None
+
+
+def artist_cover(artist, size='200x200'):
+    uri = artist.cover.uri if artist.cover and artist.cover.uri else artist.og_image
+    return cover_url(uri, size)
 
 
 def parse_lrc(text):
@@ -303,7 +309,13 @@ class Api:
             return {'authorized': False}
         try:
             # 5 секунд по умолчанию мало: большой список лайков через VPN-прокси не успевает прийти
-            self._client = Client(token, request=Request(timeout=API_TIMEOUT), report_unknown_fields=False).init()
+            self._client = Client(
+                token,
+                request=Request(timeout=API_TIMEOUT),
+                report_unknown_fields=False,
+                # Яндекс иногда не присылает необязательные поля — на работу не влияет, пишем в журнал
+                on_schema_mismatch=lambda mismatch: log.info('Ответ Яндекса не совпал со схемой: %s', mismatch),
+            ).init()
         except UnauthorizedError:
             return {'authorized': False, 'error': 'Сессия истекла, войдите ещё раз'}
         except YandexMusicError as e:
@@ -449,6 +461,34 @@ class Api:
             return None
         source = lyrics.major.pretty_name if lyrics.major else 'Яндекс Музыка'
         return lyrics_result(text, synced, list(lyrics.writers or []), source)
+
+    # --- исполнители ------------------------------------------------------
+
+    def get_artist(self, artist_id):
+        info = self._client.artists_brief_info(artist_id)
+        if not info or not info.artist:
+            raise RuntimeError('Исполнитель не найден')
+        artist = info.artist
+        return {
+            'id': str(artist.id),
+            'name': artist.name or 'Без имени',
+            'cover': artist_cover(artist, '400x400'),
+            'genres': list(artist.genres or []),
+            'tracks': artist.counts.tracks if artist.counts else None,
+            'listeners': info.stats.last_month_listeners if info.stats else None,
+            'similar': [
+                {'id': str(a.id), 'name': a.name, 'cover': artist_cover(a, '100x100')}
+                for a in (info.similar_artists or [])[:12]
+                if a.id and a.name
+            ],
+        }
+
+    def get_artist_tracks(self, artist_id, page=0):
+        """Треки исполнителя страницами по ARTIST_PAGE, в порядке, который отдаёт Яндекс."""
+        result = self._client.artists_tracks(artist_id, page=int(page), page_size=ARTIST_PAGE)
+        tracks = result.tracks if result else []
+        total = result.pager.total if result and result.pager else len(tracks)
+        return {'tracks': [self._pack(t) for t in tracks], 'total': total}
 
     # --- плейлисты --------------------------------------------------------
 

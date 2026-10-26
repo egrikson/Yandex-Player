@@ -264,7 +264,13 @@ svg { display: block; width: 16px; height: 16px; flex: none; }
   height: 2px;
   background: var(--accent);
 }
+.tab:not(.active) { background: transparent; color: var(--muted); cursor: pointer; }
+.tab:not(.active)::before { display: none; }
+.tab:not(.active):hover { color: var(--fg); background: var(--hover); }
+.tab:not(.active) .tab-wave, .tab:not(.active) #refreshBtn { display: none; }
+.tab.preview .tab-title { font-style: italic; }
 .tab-icon svg { width: 15px; height: 15px; }
+.i-user { color: var(--yellow); }
 .tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tab-refresh {
   display: grid;
@@ -387,6 +393,72 @@ kbd {
   font-style: italic;
 }
 .comment.error { color: var(--red); font-style: normal; }
+
+/* вкладка исполнителя */
+.a-link { cursor: pointer; }
+.a-link:hover { color: var(--fg-bright); text-decoration: underline; text-underline-offset: 2px; }
+.artist-head {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 18px 24px 12px;
+  font-family: var(--ui);
+}
+.artist-avatar {
+  display: grid;
+  place-items: center;
+  width: 120px; height: 120px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--bg-panel) center / cover no-repeat;
+  color: var(--gutter);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .35), 0 0 0 1px var(--bg-deep);
+}
+.artist-avatar svg { width: 44px; height: 44px; }
+.artist-avatar.has-art svg { display: none; }
+.artist-meta { min-width: 0; }
+.artist-kind { color: var(--comment); font: italic 12px var(--mono); }
+.artist-name {
+  margin: 2px 0 4px;
+  overflow: hidden;
+  color: var(--fg-bright);
+  font: 600 28px/1.15 var(--ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.artist-stats { color: var(--muted); font-size: 13px; }
+.artist-stats b { color: var(--orange); font: 600 13px var(--mono); }
+.artist-genres { margin-top: 2px; color: var(--comment); font: 12px var(--mono); }
+.artist-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.artist-actions .chip svg { color: var(--cyan); }
+.artist-similar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 0 24px 10px;
+  font-family: var(--ui);
+}
+.similar-label { margin-right: 4px; color: var(--comment); font: italic 12px var(--mono); }
+.chip-avatar {
+  width: 18px; height: 18px;
+  margin-left: -6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--selection) center / cover no-repeat;
+}
+.list-label { padding: 10px 0 4px 66px; color: var(--comment); font: italic 12px var(--mono); }
+.more-row {
+  display: block;
+  width: 100%;
+  height: 30px;
+  padding: 0 0 0 66px;
+  color: var(--blue);
+  font: italic 13px var(--mono);
+  text-align: left;
+}
+.more-row:hover { text-decoration: underline; }
+.more-row:disabled { color: var(--comment); text-decoration: none; cursor: progress; }
 
 .like.on { color: var(--red); }
 .like.on svg { fill: currentColor; }
