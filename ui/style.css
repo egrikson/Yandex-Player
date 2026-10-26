@@ -441,6 +441,16 @@ kbd {
   min-height: 0;
   padding: 28px;
 }
+.stage-back {
+  position: absolute;
+  top: 14px; left: 14px;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bg-panel) 65%, transparent);
+  color: var(--fg);
+}
+.stage-back:hover { background: var(--selection); color: var(--fg-bright); }
+.stage-back svg { width: 18px; height: 18px; }
 .stage-cover {
   display: grid;
   place-items: center;

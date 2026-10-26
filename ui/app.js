@@ -25,6 +25,7 @@ const ICONS = {
   refresh: '<path class="ico-stroke" d="M20 12a8 8 0 1 1-2.4-5.7M20 4v5h-5"/>',
   logout: '<path class="ico-stroke" d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10"/>',
   chevron: '<path class="ico-stroke" d="M7 10l5 5 5-5"/>',
+  back: '<path class="ico-stroke" d="M19 12H5M11 18l-6-6 6-6"/>',
   note: '<path class="ico-stroke" d="M9 18V5.5l10-2V16"/><circle class="ico-stroke" cx="6.5" cy="18" r="2.5"/><circle class="ico-stroke" cx="16.5" cy="16" r="2.5"/>',
   keyboard: '<rect class="ico-stroke" x="2.5" y="6" width="19" height="12" rx="2"/><path class="ico-stroke" d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M8 14h8"/>',
   palette: '<path class="ico-stroke" d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.5-.2-.8-.5-1.2-.3-.4-.5-.7-.5-1.2 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5C21 6.4 17 3 12 3z"/>'
@@ -1465,6 +1466,7 @@ function bindUi() {
     if (tab) openStage(tab.dataset.tab);
   });
   $('stageCloseBtn').addEventListener('click', closeStage);
+  $('stageBack').addEventListener('click', closeStage);
   $('swapSideBtn').addEventListener('click', () => {
     state.sideLeft = !state.sideLeft;
     store.set('sideLeft', state.sideLeft);
