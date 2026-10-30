@@ -24,16 +24,12 @@
 
     <main class="editor">
       <header class="tabs">
-        <div id="baseTab" class="tab active">
-          <span id="tabIcon" class="tab-icon"></span>
-          <span id="tabTitle" class="tab-title"></span>
-          <button id="refreshBtn" class="tab-refresh" title="Обновить" data-icon="refresh"></button>
-          <button id="tabWave" class="tab-refresh tab-wave" title="Моя волна по этому плейлисту" data-icon="wave" hidden>волна</button>
-        </div>
-        <div id="artistTab" class="tab preview" hidden>
-          <span class="tab-icon i-user" data-icon="user"></span>
-          <span id="artistTabTitle" class="tab-title"></span>
-          <button id="artistTabClose" class="tab-refresh" title="Закрыть вкладку (Ctrl W)" data-icon="close"></button>
+        <div id="tabStrip" class="tab-strip" role="tablist"></div>
+        <button id="tabAdd" class="tab-add" title="Открыть вкладку" data-icon="plus"></button>
+        <span class="tabs-space"></span>
+        <div class="tab-tools">
+          <button id="tabWave" class="tool-btn wave-tool" title="Моя волна по этому плейлисту" data-icon="wave" hidden><span>волна</span></button>
+          <button id="refreshBtn" class="tool-btn" title="Обновить" data-icon="refresh"></button>
         </div>
         <label class="filter">
           <span data-icon="search"></span>
@@ -132,7 +128,7 @@
       <span id="statusEq" class="status-item"></span>
       <span id="statusCodec" class="status-item"></span>
       <button id="themeBtn" class="theme-btn" title="Тема оформления" data-icon="palette"><span id="themeName"></span></button>
-      <span class="status-item keys" title="Пробел — играть/пауза&#10;← → — перемотка 5 с&#10;Ctrl ← → — предыдущий/следующий&#10;↑ ↓ — громкость&#10;L — лайк, S — перемешать, R — повтор&#10;T — текст, Q — очередь, E — эквалайзер&#10;Ctrl F — фильтр, Esc — закрыть / сбросить&#10;Ctrl W — закрыть вкладку исполнителя&#10;Клик по исполнителю — его вкладка&#10;Правый клик по треку — исполнитель, волна, плейлисты" data-icon="keyboard"></span>
+      <span class="status-item keys" title="Пробел — играть/пауза&#10;← → — перемотка 5 с&#10;Ctrl ← → — предыдущий/следующий&#10;↑ ↓ — громкость&#10;L — лайк, S — перемешать, R — повтор&#10;T — текст, Q — очередь, E — эквалайзер&#10;Ctrl F — фильтр, Esc — закрыть / сбросить&#10;Ctrl W или средняя кнопка — закрыть вкладку&#10;Ctrl Tab, Ctrl 1…9 — переключить вкладку&#10;Двойной клик — закрепить вкладку&#10;Клик по исполнителю — его вкладка&#10;Правый клик по треку — исполнитель, волна, плейлисты" data-icon="keyboard"></span>
     </div>
   </div>
 

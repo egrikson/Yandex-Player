@@ -159,10 +159,11 @@ const state = {
   lyricsHoldUntil: 0,
   lyricsCache: new Map(),
 
-  // вкладка исполнителя
-  baseView: null,        // плейлист в основной вкладке
-  artist: null,          // { id, name, info, total, page, loading, error } — открытая вкладка исполнителя
+  // вкладки: id — 'liked', номер плейлиста, 'wave' или 'artist:<id>'; preview — вкладка-предпросмотр (курсивом)
+  tabs: [],
+  artists: new Map(),    // id -> { id, name, info, total, page, loading, started, error }
   artistNames: new Map(),
+  savedTabs: '',
 };
 
 const audio = new Audio();
@@ -230,8 +231,23 @@ async function enter(st) {
     toast('error', `Не удалось загрузить библиотеку: ${e.message}`);
     return;
   }
+  restoreTabs();
+}
+
+/** Открытые в прошлый раз вкладки: плейлисты, которых больше нет, отбрасываем. */
+function restoreTabs() {
+  const saved = store.get('tabs', null);
+  const known = id => isArtist(id) || state.playlists.some(p => p.id === id);
+  state.tabs = (Array.isArray(saved) ? saved : [])
+    .filter(t => t && known(t.id))
+    .map(t => {
+      if (isArtist(t.id) && t.name) state.artistNames.set(t.id.slice(7), t.name);
+      return { id: t.id, preview: !!t.preview };
+    });
   const last = store.get('view', 'liked');
-  openView(state.playlists.some(p => p.id === last) ? last : 'liked');
+  if (state.tabs.some(t => t.id === last)) activateTab(last);
+  else if (state.tabs.length) activateTab(state.tabs[0].id);
+  else openView(state.playlists.some(p => p.id === last) ? last : 'liked', false, true);
 }
 
 async function logout() {
@@ -240,8 +256,9 @@ async function logout() {
   closeStage();
   state.cache.clear();
   state.lyricsCache.clear();
-  Object.assign(state, { queue: [], order: [], current: null, source: null, wave: null, waveOptions: null, artist: null });
-  $('artistTab').hidden = true;
+  Object.assign(state, { queue: [], order: [], current: null, source: null, wave: null, waveOptions: null, tabs: [], view: null });
+  state.artists.clear();
+  renderTabs();
   await call('logout').catch(() => {});
   showLogin();
 }
@@ -272,23 +289,17 @@ function renderTree() {
   $('playlists').innerHTML = own.length ? own.map(item).join('') : '<div class="tree-skeleton">// пока нет</div>';
 }
 
-async function openView(id, force = false) {
+/** Открывает плейлист во вкладке: pin — сразу закреплённой, иначе предпросмотром. */
+async function openView(id, force = false, pin = false) {
   const p = playlistById(id);
   if (!p) return;
   const seq = ++state.viewSeq;
   state.view = id;
-  state.baseView = id;
-  store.set('view', id);
-  if (state.filter) {
-    state.filter = '';
-    $('filter').value = '';
-  }
-  $('tabTitle').textContent = p.title;
-  $('tabIcon').innerHTML = svg(p.icon, 'i-' + p.icon);
+  clearFilter();
   $('refreshBtn').classList.remove('spin');
   $('waveBar').hidden = id !== 'wave';
-  $('tabWave').hidden = isSystem(p);
-  setActiveTab('base');
+  ensureTab(id, pin);
+  renderTabs();
   renderTree();
 
   if (id === 'wave') {
@@ -351,6 +362,7 @@ function rowHtml(t, i) {
 }
 
 function renderList() {
+  if (!state.view) return renderEmpty();
   if (isArtist(state.view)) return renderArtist();
   const all = state.cache.get(state.view) || [];
   const q = state.filter.trim().toLowerCase();
@@ -364,7 +376,7 @@ function renderList() {
 function updateStatusSource() {
   const all = state.cache.get(state.view) || [];
   const n = state.visible.length;
-  const total = isArtist(state.view) ? state.artist?.total ?? all.length : all.length;
+  const total = currentArtist()?.total ?? all.length;
   const count = state.filter.trim() || total > all.length
     ? `${n} из ${total}`
     : `${n} ${plural(n, 'трек', 'трека', 'треков')}`;
@@ -403,38 +415,200 @@ function openSource(id) {
   return isArtist(id) ? openArtist({ id: id.slice(7), name: state.artistNames.get(id.slice(7)) }) : openView(id);
 }
 
-/* ---------- вкладка исполнителя ---------- */
+/* ---------- вкладки ---------- */
 
-function setActiveTab(which) {
-  $('baseTab').classList.toggle('active', which === 'base');
-  $('artistTab').classList.toggle('active', which === 'artist');
-  $('artistTab').hidden = !state.artist;
-  if (state.artist) $('artistTabTitle').textContent = state.artist.name;
+function clearFilter() {
+  if (!state.filter) return;
+  state.filter = '';
+  $('filter').value = '';
 }
 
-async function openArtist(a, force = false) {
+function tabInfo(id) {
+  if (isArtist(id)) return { title: state.artistNames.get(id.slice(7)) || 'исполнитель', icon: 'user', cls: 'i-user' };
+  const p = playlistById(id);
+  return p ? { title: p.title, icon: p.icon, cls: `i-${p.icon}` } : null;
+}
+
+/** Делает вкладку открытой. Предпросмотр заменяет прежний предпросмотр, новые встают справа от активной. */
+function ensureTab(id, pin = false) {
+  let tab = state.tabs.find(t => t.id === id);
+  if (tab) {
+    if (pin) tab.preview = false;
+    return tab;
+  }
+  tab = { id, preview: !pin };
+  const preview = state.tabs.findIndex(t => t.preview);
+  if (preview >= 0 && !pin) {
+    state.tabs[preview] = tab;
+  } else {
+    const at = state.tabs.findIndex(t => t.id === state.view);
+    state.tabs.splice(at < 0 ? state.tabs.length : at + 1, 0, tab);
+  }
+  return tab;
+}
+
+function pinTab(id) {
+  const tab = state.tabs.find(t => t.id === id);
+  if (tab?.preview) {
+    tab.preview = false;
+    renderTabs();
+  }
+}
+
+function activateTab(id) {
+  if (isArtist(id)) return openArtist({ id: id.slice(7) });
+  return openView(id);
+}
+
+function closeTab(id) {
+  const i = state.tabs.findIndex(t => t.id === id);
+  if (i < 0) return;
+  state.tabs.splice(i, 1);
+  if (isArtist(id)) {
+    state.artists.delete(id.slice(7));
+    state.cache.delete(id);
+  }
+  if (state.view !== id) return renderTabs();
+  const neighbour = state.tabs[i] || state.tabs[i - 1];
+  if (neighbour) activateTab(neighbour.id);
+  else showEmpty();
+}
+
+function closeTabs(keep) {
+  const closing = state.tabs.filter(t => !keep(t)).map(t => t.id);
+  for (const id of closing) closeTab(id);
+}
+
+function moveTab(id, targetId, after) {
+  const from = state.tabs.findIndex(t => t.id === id);
+  if (from < 0 || id === targetId) return;
+  const [tab] = state.tabs.splice(from, 1);
+  const to = state.tabs.findIndex(t => t.id === targetId);
+  state.tabs.splice(to < 0 ? state.tabs.length : to + (after ? 1 : 0), 0, tab);
+  renderTabs();
+}
+
+function cycleTab(step) {
+  if (!state.tabs.length) return;
+  const i = state.tabs.findIndex(t => t.id === state.view);
+  activateTab(state.tabs[(i + step + state.tabs.length) % state.tabs.length].id);
+}
+
+function renderTabs() {
+  const strip = $('tabStrip');
+  strip.innerHTML = state.tabs.map(tab => {
+    const info = tabInfo(tab.id);
+    if (!info) return '';
+    const source = tab.id === state.source && state.current;
+    const cls = ['tab'];
+    if (tab.id === state.view) cls.push('active');
+    if (tab.preview) cls.push('preview');
+    if (source) cls.push('source');
+    if (source && !audio.paused) cls.push('playing');
+    const tip = tab.preview ? `${info.title} — предпросмотр, двойной клик закрепит` : info.title;
+    return `<div class="${cls.join(' ')}" draggable="true" role="tab" data-tab="${esc(tab.id)}" title="${esc(tip)}">`
+      + `<span class="tab-icon">${source ? EQ_ANIM : svg(info.icon, info.cls)}</span>`
+      + `<span class="tab-title">${esc(info.title)}</span>`
+      + `<button class="tab-close" data-act="close" title="Закрыть (Ctrl W)" draggable="false">${svg('close')}</button>`
+      + '</div>';
+  }).join('');
+  strip.querySelector('.tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+
+  // кнопки справа относятся к активной вкладке
+  const p = playlistById(state.view);
+  $('tabWave').hidden = !p || isSystem(p);
+  $('refreshBtn').hidden = !state.view;
+  saveTabs();
+}
+
+function saveTabs() {
+  const tabs = state.tabs.map(t => ({
+    id: t.id,
+    preview: t.preview,
+    ...(isArtist(t.id) ? { name: state.artistNames.get(t.id.slice(7)) } : {}),
+  }));
+  const snapshot = JSON.stringify([tabs, state.view]);
+  if (snapshot === state.savedTabs) return;
+  state.savedTabs = snapshot;
+  store.set('tabs', tabs);
+  if (state.view) store.set('view', state.view);
+}
+
+function showEmpty() {
+  ++state.viewSeq;
+  state.view = null;
+  state.visible = [];
+  $('waveBar').hidden = true;
+  renderTabs();
+  renderTree();
+  renderEmpty();
+}
+
+function renderEmpty() {
+  state.visible = [];
+  $('list').innerHTML = [
+    'вкладок нет — откройте плейлист слева или нажмите +',
+    '',
+    'клик по плейлисту — предпросмотр, двойной клик — закрепить вкладку',
+    'Ctrl Tab — следующая вкладка, Ctrl 1…9 — вкладка по номеру',
+    'Ctrl W или средняя кнопка мыши — закрыть вкладку',
+  ].map(line => `<div class="comment">// ${esc(line)}</div>`).join('');
+  $('statusSource').textContent = '';
+}
+
+function tabMenu(e, id) {
+  e.preventDefault();
+  const tab = state.tabs.find(t => t.id === id);
+  const index = state.tabs.indexOf(tab);
+  const items = [];
+  if (tab.preview) items.push({ icon: 'check', label: 'Закрепить вкладку', run: () => pinTab(id) }, '-');
+  items.push(
+    { icon: 'close', label: 'Закрыть', run: () => closeTab(id) },
+    { icon: 'blank', label: 'Закрыть другие', run: () => closeTabs(t => t.id === id) },
+    { icon: 'blank', label: 'Закрыть вкладки справа', run: () => closeTabs(t => state.tabs.indexOf(t) <= index) },
+    { icon: 'blank', label: 'Закрыть все', run: () => closeTabs(() => false) },
+  );
+  showMenu(e.clientX, e.clientY, items, e.target.closest('.tab'));
+}
+
+function addTabMenu() {
+  const open = new Set(state.tabs.map(t => t.id));
+  const item = p => ({ icon: p.icon, label: p.title, check: open.has(p.id), run: () => openView(p.id, false, true) });
+  const own = state.playlists.filter(p => !isSystem(p));
+  const items = [{ title: 'открыть во вкладке' }, ...state.playlists.filter(isSystem).map(item)];
+  if (own.length) items.push('-', ...own.map(item));
+  const r = $('tabAdd').getBoundingClientRect();
+  showMenu(r.left, r.bottom + 4, items, null);
+}
+
+/* ---------- вкладка исполнителя ---------- */
+
+const currentArtist = () => (isArtist(state.view) ? state.artists.get(state.view.slice(7)) : null);
+
+async function openArtist(a, force = false, pin = false) {
   if (!a?.id) return;
   const id = String(a.id);
   const key = `artist:${id}`;
   if (state.stageOpen) closeStage();
   hideMenu();
   if (a.name) state.artistNames.set(id, a.name);
-  if (force || state.artist?.id !== id) {
-    state.artist = { id, name: a.name || state.artistNames.get(id) || 'исполнитель', info: null, total: null, page: 0, loading: true, error: null };
+  let ar = state.artists.get(id);
+  if (force || !ar) {
+    ar = { id, name: state.artistNames.get(id) || 'исполнитель', info: null, total: null, page: 0, loading: true, started: false, error: null };
+    state.artists.set(id, ar);
     state.cache.delete(key);
   }
-  const ar = state.artist;
   ++state.viewSeq;
   state.view = key;
-  if (state.filter) {
-    state.filter = '';
-    $('filter').value = '';
-  }
+  clearFilter();
   $('waveBar').hidden = true;
-  setActiveTab('artist');
+  $('refreshBtn').classList.remove('spin');
+  ensureTab(key, pin);
+  renderTabs();
   renderTree();
-  if (state.cache.has(key) || ar.error) return renderList();
+  if (ar.started) return renderList(); // уже загружено или грузится
 
+  ar.started = true;
   renderList();
   $('list').scrollTop = 0;
   try {
@@ -446,17 +620,9 @@ async function openArtist(a, force = false) {
     ar.error = e.message;
   }
   ar.loading = false;
-  if (state.artist !== ar) return;
-  setActiveTab(isArtist(state.view) ? 'artist' : 'base');
+  if (state.artists.get(id) !== ar) return; // вкладку успели закрыть или обновить
+  renderTabs();
   if (state.view === key) renderList();
-}
-
-function closeArtistTab() {
-  if (!state.artist) return;
-  const wasActive = isArtist(state.view);
-  state.artist = null;
-  $('artistTab').hidden = true;
-  if (wasActive) openView(state.baseView || 'liked');
 }
 
 function artistHeaderHtml(ar) {
@@ -486,7 +652,8 @@ function artistHeaderHtml(ar) {
 }
 
 function renderArtist() {
-  const ar = state.artist;
+  const ar = currentArtist();
+  if (!ar) return renderEmpty();
   const all = state.cache.get(state.view) || [];
   const q = state.filter.trim().toLowerCase();
   state.visible = q ? all.filter(t => `${t.title} ${t.artists}`.toLowerCase().includes(q)) : all;
@@ -512,7 +679,7 @@ function renderArtist() {
 }
 
 async function loadMoreArtist(button) {
-  const ar = state.artist;
+  const ar = currentArtist();
   if (!ar || ar.loading) return;
   const key = `artist:${ar.id}`;
   const list = state.cache.get(key) || [];
@@ -532,7 +699,7 @@ async function loadMoreArtist(button) {
     toast('error', `Не удалось загрузить треки: ${e.message}`);
   }
   ar.loading = false;
-  if (state.artist === ar && state.view === key) {
+  if (currentArtist() === ar) {
     const top = $('list').scrollTop;
     renderList();
     $('list').scrollTop = top;
@@ -571,8 +738,11 @@ function playFrom(list, index, source) {
   state.source = source;
   state.errors = 0;
   buildOrder(index);
+  const tab = state.tabs.find(t => t.id === source);
+  if (tab) tab.preview = false; // включили музыку из предпросмотра — значит, вкладка нужна
   renderTree();
   playPos(state.pos);
+  renderTabs();
 }
 
 async function playPos(pos) {
@@ -709,6 +879,7 @@ function setPlayingUi(playing) {
   setIcon($('playBtn'), playing ? 'pause' : 'play');
   call('set_playing', playing).catch(() => {});
   $('list').querySelector('.row.current')?.classList.toggle('playing', playing);
+  $('tabStrip').querySelector('.tab.source')?.classList.toggle('playing', playing);
   if ('mediaSession' in navigator) navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
   if (state.view === 'wave') renderWavePlay();
 }
@@ -1354,7 +1525,7 @@ function treeMenu(e, item) {
   e.preventDefault();
   const p = playlistById(item.dataset.id);
   if (!p) return;
-  const items = [{ icon: p.icon, label: 'Открыть', run: () => openView(p.id) }];
+  const items = [{ icon: p.icon, label: 'Открыть во вкладке', run: () => openView(p.id, false, true) }];
   if (p.id === 'wave') {
     items.push({ icon: 'play', label: 'Слушать Мою волну', run: () => { startWave(myWave(), true); openView('wave'); } });
   }
@@ -1565,29 +1736,86 @@ function bindUi() {
   const tree = document.querySelector('.tree-scroll');
   tree.addEventListener('click', e => {
     const item = e.target.closest('.tree-item');
-    if (item) openView(item.dataset.id);
+    if (item && item.dataset.id !== state.view) openView(item.dataset.id);
+  });
+  tree.addEventListener('dblclick', e => {
+    const item = e.target.closest('.tree-item');
+    if (item) pinTab(item.dataset.id);
   });
   tree.addEventListener('contextmenu', e => {
     const item = e.target.closest('.tree-item');
     if (item) treeMenu(e, item);
   });
-  $('refreshBtn').addEventListener('click', e => {
-    e.stopPropagation();
-    if (state.baseView) openView(state.baseView, true);
+
+  // кнопки справа от вкладок — для активной вкладки
+  $('refreshBtn').addEventListener('click', () => {
+    if (isArtist(state.view)) openArtist({ id: state.view.slice(7) }, true);
+    else if (state.view) openView(state.view, true);
   });
-  $('tabWave').addEventListener('click', e => {
-    e.stopPropagation();
-    waveByPlaylist(playlistById(state.baseView));
+  $('tabWave').addEventListener('click', () => waveByPlaylist(playlistById(state.view)));
+  $('tabAdd').addEventListener('click', addTabMenu);
+
+  // вкладки
+  const strip = $('tabStrip');
+  const tabOf = e => e.target.closest('.tab')?.dataset.tab;
+  strip.addEventListener('click', e => {
+    const id = tabOf(e);
+    if (!id) return;
+    if (e.target.closest('[data-act="close"]')) return closeTab(id);
+    if (id !== state.view) activateTab(id);
   });
-  $('baseTab').addEventListener('click', () => {
-    if (state.view !== state.baseView && state.baseView) openView(state.baseView);
+  strip.addEventListener('dblclick', e => {
+    const id = tabOf(e);
+    if (id && !e.target.closest('[data-act="close"]')) pinTab(id);
   });
-  $('artistTab').addEventListener('click', () => {
-    if (state.artist && !isArtist(state.view)) openArtist(state.artist);
+  strip.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); }); // без автопрокрутки
+  strip.addEventListener('auxclick', e => {
+    const id = tabOf(e);
+    if (id && e.button === 1) closeTab(id);
   });
-  $('artistTabClose').addEventListener('click', e => {
-    e.stopPropagation();
-    closeArtistTab();
+  strip.addEventListener('contextmenu', e => {
+    const id = tabOf(e);
+    if (id) tabMenu(e, id);
+  });
+  strip.addEventListener('wheel', e => {
+    if (!e.deltaY) return;
+    e.preventDefault();
+    strip.scrollLeft += e.deltaY;
+  }, { passive: false });
+
+  // перетаскивание вкладок
+  let dragged = null;
+  const clearDrop = () => strip.querySelectorAll('.drop-before, .drop-after').forEach(t => t.classList.remove('drop-before', 'drop-after'));
+  const dropSide = (e, tab) => {
+    const r = tab.getBoundingClientRect();
+    return e.clientX > r.left + r.width / 2;
+  };
+  strip.addEventListener('dragstart', e => {
+    const tab = e.target.closest('.tab');
+    if (!tab) return;
+    dragged = tab.dataset.tab;
+    tab.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', dragged);
+  });
+  strip.addEventListener('dragover', e => {
+    const tab = e.target.closest('.tab');
+    if (!dragged || !tab || tab.dataset.tab === dragged) return;
+    e.preventDefault();
+    clearDrop();
+    tab.classList.add(dropSide(e, tab) ? 'drop-after' : 'drop-before');
+  });
+  strip.addEventListener('drop', e => {
+    const tab = e.target.closest('.tab');
+    e.preventDefault();
+    clearDrop();
+    if (dragged && tab) moveTab(dragged, tab.dataset.tab, dropSide(e, tab));
+    dragged = null;
+  });
+  strip.addEventListener('dragend', () => {
+    clearDrop();
+    strip.querySelector('.dragging')?.classList.remove('dragging');
+    dragged = null;
   });
   $('stageArtist').addEventListener('click', e => {
     const link = e.target.closest('.a-link');
@@ -1600,7 +1828,10 @@ function bindUi() {
     const act = e.target.closest('[data-act]')?.dataset.act;
     if (act === 'artist-more') return loadMoreArtist(e.target.closest('.more-row'));
     if (act === 'artist-play') return playArtist();
-    if (act === 'artist-wave') return waveByArtist({ id: state.artist.id, name: state.artist.name });
+    if (act === 'artist-wave') {
+      const ar = currentArtist();
+      return ar && waveByArtist({ id: ar.id, name: ar.name });
+    }
     if (act === 'artist-open') {
       const chip = e.target.closest('[data-act]');
       return openArtist({ id: chip.dataset.artist, name: chip.dataset.name });
@@ -1848,7 +2079,20 @@ function onKey(e) {
   }
   if (e.ctrlKey && e.code === 'KeyW') {
     e.preventDefault();
-    closeArtistTab();
+    if (state.view) closeTab(state.view);
+    return;
+  }
+  if (e.ctrlKey && e.code === 'Tab') {
+    e.preventDefault();
+    cycleTab(e.shiftKey ? -1 : 1);
+    return;
+  }
+  const digit = /^Digit([1-9])$/.exec(e.code);
+  if (e.ctrlKey && digit && !e.shiftKey && !e.altKey) {
+    e.preventDefault();
+    const n = Number(digit[1]);
+    const tab = n === 9 ? state.tabs[state.tabs.length - 1] : state.tabs[n - 1]; // Ctrl 9 — последняя, как в браузерах
+    if (tab) activateTab(tab.id);
     return;
   }
   if (e.ctrlKey && e.code === 'KeyF') {
